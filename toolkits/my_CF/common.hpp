@@ -66,6 +66,10 @@ vec userBias;
 vec itemBias;
 /******************************************************/
 
+/****** for bounded-SVD with faces images experiments ***/
+int imageSet;
+
+/*******/
 double minval = -1e100; //max allowed value in matrix
 double maxval = 1e100; //min allowed value in matrix
 double valrange = 1; //range of allowed values in matrix
@@ -161,7 +165,7 @@ void parse_command_line_args() {
 		global_logger().set_log_level(LOG_WARNING);
 	halt_on_rmse_increase = get_option_int("halt_on_rmse_increase", 0);
 
-	/************** for BSGD experiments ******************/
+	/************** for BSGD experiments ******************
 	halt_on_minor_improvement = get_option_float("halt_on_minor_improvement", 0.0);
 	init_features_type = get_option_int("init_features_type", 3);
 	dataset = get_option_string("dataset", "");
@@ -180,6 +184,26 @@ void parse_command_line_args() {
 	validation = validation_ss.str();
 	test = test_ss.str();
 	/******************************************************/
+
+	/************** for bounded-SVD with face images experiments *********************/
+	halt_on_minor_improvement = get_option_float("halt_on_minor_improvement", 0.0);
+	init_features_type = get_option_int("init_features_type", 3);
+	dataset = get_option_string("dataset", "");
+	imageSet = get_option_int("imageSet");
+	run = get_option_int("run", 0);
+	// update train, test, validation file name
+	std::stringstream train_ss;
+	std::stringstream validation_ss;
+	std::stringstream test_ss;
+
+	train_ss << "dataset/" << dataset << "/faces_" << imageSet << "_train.mm";
+	validation_ss << "dataset/" << dataset << "/faces_" << imageSet << "_validation.mm";
+	test_ss << "dataset/" << dataset << "/faces_" << imageSet << "_test.mm";
+
+	training = train_ss.str();
+	validation = validation_ss.str();
+	test = test_ss.str();
+	/*********************************************************************************/
 
 	load_factors_from_file = get_option_int("load_factors_from_file", 0);
 	input_file_offset = get_option_int("input_file_offset", input_file_offset);
@@ -312,6 +336,40 @@ void bsgd_print_config() {
 	}
 	std::cout << "	+ Experiment: " << experiment << std::endl;
 	std::cout << "	+ Run: " << run << std::endl;
+	std::cout << "	+ alpha = " << alpha << std::endl;
+	std::cout << "	+ lambda = " << lambda << std::endl;
+	std::cout << "	+ muy = " << muy << std::endl;
+	std::cout << "	+ step_dec = " << step_dec << std::endl;
+	std::cout << "	+ max iterations = " << niters << std::endl;
+	std::cout << "	+ halt_on_rmse_increase = " << halt_on_rmse_increase << std::endl;
+	std::cout << "	+ halt_on_minor_improvement = " << halt_on_minor_improvement << std::endl;
+}
+
+void bsgd_facesImg_print_config() {
+	std::cout << "****** BSGD faces images experiments *******" << std::endl;
+	std::cout << "+ Dataset: " << dataset << std::endl;
+	std::cout << "+ # Users: " << M << std::endl;
+	std::cout << "+ # Items: " << N << std::endl;
+	std::cout << "+ Min rating: " << minval << std::endl;
+	std::cout << "+ Max rating: " << maxval << std::endl;
+	std::cout << "+ Training ratings: " << L << std::endl;
+	std::cout << "*** Parameters setting ***" << std::endl;
+	std::cout << "	+ BSGD version: " << bsgd_ver << std::endl;
+	std::cout << "	+ # latent features (K): " << D << std::endl;
+	switch (init_features_type) {
+	case 1:		// bounded random
+		std::cout << "	+ Init features type: [bounded random]" << std::endl;
+		break;
+	case 2:		// baseline
+		std::cout << "	+ Init features type: [baseline]" << std::endl;
+		break;
+	case 3:		// random
+		std::cout << "	+ Init features type: [random]" << std::endl;
+		break;
+	default:	// random
+		std::cout << "	+ Init features type: [random]" << std::endl;
+	}
+	std::cout << "	+ imageSet: " << imageSet << std::endl;
 	std::cout << "	+ alpha = " << alpha << std::endl;
 	std::cout << "	+ lambda = " << lambda << std::endl;
 	std::cout << "	+ muy = " << muy << std::endl;

@@ -193,7 +193,7 @@ void print_config_to_file(std::ofstream & f) {
 	default: // random
 		f << "	+ Init features type: [random]" << std::endl;
 	}
-	f << "	+ Experiment: " << experiment << std::endl;
+	f << "	+ imageSet: " << imageSet << std::endl;
 	f << "	+ Run: " << run << std::endl;
 	f << "	+ lambda = " << lambda << std::endl;
 	f << "	+ alpha = " << alpha << std::endl;
@@ -208,7 +208,7 @@ void print_config_to_file(std::ofstream & f) {
 int main(int argc, const char ** argv) {
 
 	// to decide whether to log the results or not
-	bool logMode = true;
+	bool logMode = false;
 
 	//* GraphChi initialization will read the command line arguments and the configuration file. */
 	graphchi_init(argc, argv);
@@ -263,7 +263,7 @@ int main(int argc, const char ** argv) {
 //		load_matrix_market_matrix(training + "_V.mm", M, D);
 //	}
 
-	bsgd_print_config();
+	bsgd_facesImg_print_config;
 
 	std::streambuf *fileBuf, *backup;
 	std::string fileName;
@@ -271,9 +271,12 @@ int main(int argc, const char ** argv) {
 		// create log file
 		std::stringstream fn;
 		time_t now = time(0);
-		std::string basePath = "./results/";
-		fn << basePath << now << "_" << dataset << "_BSGD-" << bsgd_ver << "_"
-				<< initType << "_RMSE_K" << D << "_Exp" << experiment << "_Run"
+		std::stringstream basePath;
+//		basePath << "./results_" << now << "/";
+		basePath << "./results1/";
+
+		fn << basePath.str() << dataset << "_BSGD-" << bsgd_ver << "_"
+				<< initType << "_RMSE_K" << D << "_imgSet" << experiment << "_Run"
 				<< run << ".txt";
 		fileName = fn.str();
 
