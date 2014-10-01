@@ -180,3 +180,15 @@ xcuserdata
 # UNKNOWN: recommended by others, but I can't discover what these files are
 #
 # ...none. Everything is now explained.
+
+########## ICE ignored part #############
+*.zip
+*.tar.bz2
+*.tar.bz2.1
+/dataset
+/results
+/BSGD-1_baseline
+/BSGD-2_bash
+/BSGD-baseline-prepare
+runBSGD
+paramsNotes.txt
