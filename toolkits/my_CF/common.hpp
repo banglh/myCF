@@ -47,8 +47,10 @@
 using namespace graphchi;
 
 /************** for BSGD experiments ******************/
-int bsgd_ver = 2;	// BSGD version (1: the bound constraint only for known ratings;
+int bsgd_ver = 1;	// BSGD version (1: the bound constraint only for known ratings;
 					//				 2: the bound constraint is for the whole ratings)
+int logMode = 0;	// 0: no log
+					// 1: log to files
 float halt_on_minor_improvement = 0.0;		// <ice>
 int init_features_type;		// possible values: 1: "bounded_random", 2: "baseline", 3: "random";
 std::string dataset;				// dataset name (Book, Jester, Dating, MovieLens-10M)
@@ -186,6 +188,8 @@ void parse_command_line_args() {
 	/******************************************************/
 
 	/************** for bounded-SVD with face images experiments *********************/
+	bsgd_ver = get_option_int("bsgd_ver", 1);
+	logMode = get_option_int("logMode", 0);
 	halt_on_minor_improvement = get_option_float("halt_on_minor_improvement", 0.0);
 	init_features_type = get_option_int("init_features_type", 3);
 	dataset = get_option_string("dataset", "");

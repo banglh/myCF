@@ -190,5 +190,10 @@ xcuserdata
 /BSGD-1_baseline
 /BSGD-2_bash
 /BSGD-baseline-prepare
+/results1
 runBSGD
 paramsNotes.txt
+/toolkits/myCF/bsvd_facesExp
+/toolkits/myCF/bsgd
+/toolkits/myCF/bsgd_baseline_prepare
+

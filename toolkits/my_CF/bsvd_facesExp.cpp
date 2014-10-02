@@ -208,7 +208,7 @@ void print_config_to_file(std::ofstream & f) {
 int main(int argc, const char ** argv) {
 
 	// to decide whether to log the results or not
-	bool logMode = false;
+//	bool logMode = true;
 
 	//* GraphChi initialization will read the command line arguments and the configuration file. */
 	graphchi_init(argc, argv);
@@ -267,7 +267,7 @@ int main(int argc, const char ** argv) {
 
 	std::streambuf *fileBuf, *backup;
 	std::string fileName;
-	if (logMode) {
+	if (logMode == 1) {
 		// create log file
 		std::stringstream fn;
 		time_t now = time(0);
@@ -275,7 +275,7 @@ int main(int argc, const char ** argv) {
 //		basePath << "./results_" << now << "/";
 		basePath << "./results1/";
 
-		fn << basePath.str() << dataset << "_BSGD-" << bsgd_ver << "_"
+		fn << basePath.str() << now << "_" << dataset << "_BSGD-" << bsgd_ver << "_"
 				<< initType << "_RMSE_K" << D << "_imgSet" << experiment << "_Run"
 				<< run << ".txt";
 		fileName = fn.str();
@@ -303,7 +303,7 @@ int main(int argc, const char ** argv) {
 	double testRMSE = test_predictions(&bsgd_predict);
 
 	// write RMSE on test set to log file
-	if (logMode) {
+	if (logMode == 1) {
 		logFile << "Test RMSE: " << testRMSE << std::endl;
 		std::cout.rdbuf(backup);
 		logFile.close();
