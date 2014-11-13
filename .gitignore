@@ -193,7 +193,13 @@ xcuserdata
 /results1
 runBSGD
 paramsNotes.txt
-/toolkits/myCF/bsvd_facesExp
-/toolkits/myCF/bsgd
-/toolkits/myCF/bsgd_baseline_prepare
+/toolkits/my_CF/bsvd_facesExp
+/toolkits/my_CF/bsgd
+/toolkits/my_CF/bsgd_baseline_prepare
+runMovieLens1M
+runMovieLens1M-K10
+runMovieLens1M-K20
+runMovieLens1M-K50
+runSGD
+
 

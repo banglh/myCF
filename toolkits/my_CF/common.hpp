@@ -53,14 +53,14 @@ int logMode = 0;	// 0: no log
 					// 1: log to files
 float halt_on_minor_improvement = 0.0;		// <ice>
 int init_features_type;		// possible values: 1: "bounded_random", 2: "baseline", 3: "random";
-std::string dataset;				// dataset name (Book, Jester, Dating, MovieLens-10M)
+std::string dataset;				// dataset name (Book, Jester, Dating, MovieLens-10M, MovieLens-1M)
 int experiment;
 int run;
 double muy;
 double alpha;
 double lambda;
 double step_dec;
-//bool logMode;
+
 // for baseline initialization
 int updatedVertexNum;
 bool baselineInitFinished;
@@ -69,7 +69,8 @@ vec itemBias;
 /******************************************************/
 
 /****** for bounded-SVD with faces images experiments ***/
-int imageSet;
+int imageSet = 0;
+double pixelMod = 1e-5;
 
 /*******/
 double minval = -1e100; //max allowed value in matrix
@@ -155,6 +156,13 @@ void parse_command_line_args() {
 
 	maxval = get_option_float("maxval", 1e100);
 	minval = get_option_float("minval", -1e100);
+
+	/******* for faces images experiments ******
+	pixelMod = get_option_float("pixelMod", 1e-5);
+	minval += pixelMod;
+	maxval += pixelMod;
+	/******/
+
 	if (minval >= maxval)
 		logstream(LOG_FATAL)
 				<< "Min allowed rating (--minval) should be smaller than max allowed rating (--maxval)"
@@ -167,7 +175,9 @@ void parse_command_line_args() {
 		global_logger().set_log_level(LOG_WARNING);
 	halt_on_rmse_increase = get_option_int("halt_on_rmse_increase", 0);
 
-	/************** for BSGD experiments ******************
+	/************** for BSGD experiments ******************/
+	bsgd_ver = get_option_int("bsgd_ver", 1);
+	logMode = get_option_int("logMode", 0);
 	halt_on_minor_improvement = get_option_float("halt_on_minor_improvement", 0.0);
 	init_features_type = get_option_int("init_features_type", 3);
 	dataset = get_option_string("dataset", "");
@@ -178,16 +188,20 @@ void parse_command_line_args() {
 	std::stringstream validation_ss;
 	std::stringstream test_ss;
 
-	train_ss << "dataset/" << dataset << "/" << dataset << "_K" << D << "_exp" << experiment << "_train.mm";
-	validation_ss << "dataset/" << dataset << "/" << dataset << "_K" << D << "_exp" << experiment << "_validation.mm";
-	test_ss << "dataset/" << dataset << "/" << dataset << "_K" << D << "_exp" << experiment << "_test.mm";
+//	train_ss << "dataset/" << dataset << "/" << dataset << "_K" << D << "_exp" << experiment << "_train.mm";
+//	validation_ss << "dataset/" << dataset << "/" << dataset << "_K" << D << "_exp" << experiment << "_validation.mm";
+//	test_ss << "dataset/" << dataset << "/" << dataset << "_K" << D << "_exp" << experiment << "_test.mm";
+
+	train_ss << "dataset/" << dataset << "/" << dataset << "_train.mm";
+	validation_ss << "dataset/" << dataset << "/" << dataset << "_validation.mm";
+	test_ss << "dataset/" << dataset << "/" << dataset << "_test.mm";
 
 	training = train_ss.str();
 	validation = validation_ss.str();
 	test = test_ss.str();
 	/******************************************************/
 
-	/************** for bounded-SVD with face images experiments *********************/
+	/************** for bounded-SVD with face images experiments *********************
 	bsgd_ver = get_option_int("bsgd_ver", 1);
 	logMode = get_option_int("logMode", 0);
 	halt_on_minor_improvement = get_option_float("halt_on_minor_improvement", 0.0);
@@ -349,6 +363,38 @@ void bsgd_print_config() {
 	std::cout << "	+ halt_on_minor_improvement = " << halt_on_minor_improvement << std::endl;
 }
 
+void sgd_facesImg_print_config(double sgd_lambda) {
+	std::cout << "****** SGD faces images experiments *******" << std::endl;
+	std::cout << "+ Dataset: " << dataset << std::endl;
+	std::cout << "+ # Users: " << M << std::endl;
+	std::cout << "+ # Items: " << N << std::endl;
+	std::cout << "+ Min rating: " << minval << std::endl;
+	std::cout << "+ Max rating: " << maxval << std::endl;
+	std::cout << "+ Training ratings: " << L << std::endl;
+	std::cout << "*** Parameters setting ***" << std::endl;
+	std::cout << "	+ # latent features (K): " << D << std::endl;
+	switch (init_features_type) {
+	case 1:		// bounded random
+		std::cout << "	+ Init features type: [bounded random]" << std::endl;
+		break;
+	case 2:		// baseline
+		std::cout << "	+ Init features type: [baseline]" << std::endl;
+		break;
+	case 3:		// random
+		std::cout << "	+ Init features type: [random]" << std::endl;
+		break;
+	default:	// random
+		std::cout << "	+ Init features type: [random]" << std::endl;
+	}
+	std::cout << "	+ imageSet: " << imageSet << std::endl;
+	std::cout << "	+ sgd_lambda = " << sgd_lambda << std::endl;
+	std::cout << "	+ muy = " << muy << std::endl;
+	std::cout << "	+ step_dec = " << step_dec << std::endl;
+	std::cout << "	+ max iterations = " << niters << std::endl;
+	std::cout << "	+ halt_on_rmse_increase = " << halt_on_rmse_increase << std::endl;
+	std::cout << "	+ halt_on_minor_improvement = " << halt_on_minor_improvement << std::endl;
+}
+
 void bsgd_facesImg_print_config() {
 	std::cout << "****** BSGD faces images experiments *******" << std::endl;
 	std::cout << "+ Dataset: " << dataset << std::endl;
@@ -385,7 +431,7 @@ void bsgd_facesImg_print_config() {
 
 template<typename T>
 void init_feature_vectors(uint size, T& latent_factors_inmem, bool randomize =
-		true, double scale = 1.0) {
+		true, double scale = 0.1) {
 	assert(size > 0);
 
 	srand48(time(NULL));

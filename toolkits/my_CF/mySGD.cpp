@@ -17,6 +17,7 @@
 using namespace std;
 
 std::ofstream logFile; // output file
+double sgd_lambda = 1e-3; //sgd regularization
 
 struct vertex_data {
 	vec pvec; //storing the feature vector
@@ -51,7 +52,7 @@ std::vector<vertex_data> latent_factors_inmem;
 #include "io.hpp"
 
 /** compute a missing value based on SGD algorithm */
-float bsgd_predict(const vertex_data& user, const vertex_data& item,
+float sgd_predict(const vertex_data& user, const vertex_data& item,
 		const float rating, double & prediction, void * extra = NULL) {
 
 	prediction = dot_prod(user.pvec, item.pvec);
@@ -112,14 +113,14 @@ struct SGDVerticesInMemProgram: public GraphChiProgram<VertexDataType,
 
 				// calculate the current estimation for the rating value
 				double estScore;
-				rmse_vec[omp_get_thread_num()] += bsgd_predict(user, item,
+				rmse_vec[omp_get_thread_num()] += sgd_predict(user, item,
 						observation, estScore);
 
 				// calculate the error
 				double err = observation - estScore;
 				if (std::isnan(err) || std::isinf(err))
 					logstream(LOG_FATAL)
-							<< "SGD got into numerical error. Please tune step size using --muy and --alpha"
+							<< "SGD got into numerical error. Please tune step size using --muy and --sgd_lamda"
 							<< std::endl;
 
 				//NOTE: the following code is not thread safe, since potentially several
@@ -128,33 +129,16 @@ struct SGDVerticesInMemProgram: public GraphChiProgram<VertexDataType,
 				//if you like to defend the code, you can define a global variable
 				//
 				// update the feature vectors
-				double expTerm = exp(alpha * (estScore - maxval)) - exp(alpha * (minval - estScore));
-				double temp = muy * (err - lambda * alpha * expTerm);
 
 				mutex mymutex;
 				mymutex.lock();
 
-				item.pvec += temp * user.pvec;
+				item.pvec += muy * (err * user.pvec - sgd_lambda * item.pvec);
 
 				mymutex.unlock();
 
-				user.pvec += temp * item.pvec;
-			}
-			// if the bound constraint is for the whole rating matrix
-			if (bsgd_ver == 2) {
-				// for each item has not been rated by the user
-				for (int i = M; i < M + N; i++) {
-					if (ratedItems.count(i) == 0) {
-						// calculate the current estimation for the rating value
-						vertex_data & item = latent_factors_inmem[i];
-						double estScore = dot_prod(user.pvec, item.pvec);
-						// update feature vectors
-						double expTerm = exp(alpha * (estScore - maxval))
-								- exp(alpha * (minval - estScore));
-						user.pvec -= muy * lambda * alpha * expTerm * item.pvec;
-						item.pvec -= muy * lambda * alpha * expTerm * user.pvec;
-					}
-				}
+				user.pvec += muy * (err * item.pvec - sgd_lambda * user.pvec);
+
 			}
 		}
 	}
@@ -174,7 +158,7 @@ void output_sgd_result(std::string filename) {
 }
 
 void print_config_to_file(std::ofstream & f) {
-	f << "****** BSGD experiment with faces dataset *******" << std::endl;
+	f << "****** SGD experiment with faces dataset *******" << std::endl;
 	f << "+ Dataset: " << dataset << std::endl;
 	f << "+ # Users: " << M << std::endl;
 	f << "+ # Items: " << N << std::endl;
@@ -182,7 +166,6 @@ void print_config_to_file(std::ofstream & f) {
 	f << "+ Max rating: " << maxval << std::endl;
 	f << "+ Training ratings: " << L << std::endl;
 	f << "*** Parameters setting ***" << std::endl;
-	f << "	+ BSGD version: " << bsgd_ver << std::endl;
 	f << "	+ # latent features (K): " << D << std::endl;
 	switch (init_features_type) {
 	case 1: // bounded random
@@ -199,8 +182,7 @@ void print_config_to_file(std::ofstream & f) {
 	}
 	f << "	+ imageSet: " << imageSet << std::endl;
 	f << "	+ Run: " << run << std::endl;
-	f << "	+ lambda = " << lambda << std::endl;
-	f << "	+ alpha = " << alpha << std::endl;
+	f << "	+ sgd_lambda = " << sgd_lambda << std::endl;
 	f << "	+ muy = " << muy << std::endl;
 	f << "	+ step_dec = " << step_dec << std::endl;
 	f << "	+ max iterations = " << niters << std::endl;
@@ -219,19 +201,19 @@ int main(int argc, const char ** argv) {
 
 	/* Metrics object for keeping track of performance counters
 	 and other information. Currently required. */
-	metrics m("bsgd-inmemory-factors");
+	metrics m("sgd-inmemory-factors");
 
 	/* Basic arguments for application. NOTE: File will be automatically 'sharded'. */
 	muy = get_option_float("muy", 5e-3);
-	alpha = get_option_float("alpha", 1.0);
-	lambda = get_option_float("lambda", 1.0);
+	sgd_lambda = get_option_float("sgd_lambda", 1e-3);
 	step_dec = get_option_float("step_dec", 1);
 
 	parse_command_line_args();
 	parse_implicit_command_line();
 
 	/* Preprocess data if needed, or discover preprocess files */
-	int nshards = convert_matrixmarket<EdgeDataType>(training, 0, 0, 3, TRAINING, false);
+	int nshards = convert_matrixmarket<EdgeDataType>(training, 0, 0, 3,
+			TRAINING, false);
 
 	// initialize features vectors
 	std::string initType;
@@ -239,7 +221,8 @@ int main(int argc, const char ** argv) {
 	case 1: // bounded random
 		// randomly initialize feature vectors so that rmin < rate < rmax
 		initType = "bounded-random";
-		init_random_bounded<std::vector<vertex_data> >(latent_factors_inmem, !load_factors_from_file);
+		init_random_bounded<std::vector<vertex_data> >(latent_factors_inmem,
+				!load_factors_from_file);
 		break;
 	case 2: // baseline
 		initType = "baseline";
@@ -249,16 +232,20 @@ int main(int argc, const char ** argv) {
 		break;
 	case 3: // random
 		initType = "random";
-		init_feature_vectors<std::vector<vertex_data> >(M + N, latent_factors_inmem, !load_factors_from_file);
+		init_feature_vectors<std::vector<vertex_data> >(M + N,
+				latent_factors_inmem, !load_factors_from_file);
 		break;
 	default: // random
 		initType = "random";
-		init_feature_vectors<std::vector<vertex_data> >(M + N, latent_factors_inmem, !load_factors_from_file);
+		init_feature_vectors<std::vector<vertex_data> >(M + N,
+				latent_factors_inmem, !load_factors_from_file);
 	}
 
 	if (validation != "") {
-		int vshards = convert_matrixmarket<EdgeDataType>(validation, 0, 0, 3, VALIDATION, false);
-		init_validation_rmse_engine<VertexDataType, EdgeDataType>(pvalidation_engine, vshards, &bsgd_predict);
+		int vshards = convert_matrixmarket<EdgeDataType>(validation, 0, 0, 3,
+				VALIDATION, false);
+		init_validation_rmse_engine<VertexDataType, EdgeDataType>(
+				pvalidation_engine, vshards, &sgd_predict);
 	}
 
 //	/* load initial state from disk (optional) */
@@ -267,7 +254,7 @@ int main(int argc, const char ** argv) {
 //		load_matrix_market_matrix(training + "_V.mm", M, D);
 //	}
 
-	bsgd_facesImg_print_config;
+	sgd_facesImg_print_config(sgd_lambda);
 
 	std::streambuf *fileBuf, *backup;
 	std::string fileName;
@@ -278,11 +265,10 @@ int main(int argc, const char ** argv) {
 		// create log file
 		std::stringstream fn;
 		now = time(0);
-		basePath << "./results1/";
+		basePath << "./results2/";
 
-		fn << basePath.str() << now << "_" << dataset << "_BSGD-" << bsgd_ver << "_"
-				<< initType << "_RMSE_K" << D << "_alpha" << alpha << "_lambda" << lambda << "_Run"
-				<< run << ".txt";
+		fn << basePath.str() << now << "_" << dataset << "_SGD"
+				<< "_" << initType << "_RMSE_K" << D << "_Run" << run << ".txt";
 		fileName = fn.str();
 
 		logFile.open(fileName.c_str());
@@ -298,7 +284,8 @@ int main(int argc, const char ** argv) {
 
 	/* Run */
 	SGDVerticesInMemProgram program;
-	graphchi_engine<VertexDataType, EdgeDataType> engine(training, nshards, false, m);
+	graphchi_engine<VertexDataType, EdgeDataType> engine(training, nshards,
+			false, m);
 	set_engine_flags(engine);
 	pengine = &engine;
 	engine.run(program, niters);
@@ -306,13 +293,12 @@ int main(int argc, const char ** argv) {
 	/* Output latent factor matrices in matrix-market format */
 	if (logMode == 1) {
 		std::stringstream baseFn;
-		baseFn << basePath.str() << now << "_" << dataset << "_BSGD-" << bsgd_ver << "_"
-				<< initType << "_RMSE_K" << D << "_alpha" << alpha << "_lambda" << lambda << "_Run"
-				<< run;
+		baseFn << basePath.str() << now << "_" << dataset << "_SGD"
+				<< "_RMSE_K" << D << "_Run" << run;
 		output_sgd_result(baseFn.str());
 	}
 
-	double testRMSE = test_predictions(&bsgd_predict);
+	double testRMSE = test_predictions(&sgd_predict);
 
 	// write RMSE on test set to log file
 	if (logMode == 1) {

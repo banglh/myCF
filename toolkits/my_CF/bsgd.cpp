@@ -207,9 +207,6 @@ void print_config_to_file(std::ofstream & f) {
 
 int main(int argc, const char ** argv) {
 
-	// to decide whether to log the results or not
-	bool logMode = true;
-
 	//* GraphChi initialization will read the command line arguments and the configuration file. */
 	graphchi_init(argc, argv);
 
@@ -267,12 +264,16 @@ int main(int argc, const char ** argv) {
 
 	std::streambuf *fileBuf, *backup;
 	std::string fileName;
-	if (logMode) {
+	std::stringstream basePath;
+	time_t now;
+
+	if (logMode == 1) {
 		// create log file
 		std::stringstream fn;
-		time_t now = time(0);
-		std::string basePath = "./results/";
-		fn << basePath << now << "_" << dataset << "_BSGD-" << bsgd_ver << "_"
+		now = time(0);
+		basePath << "./results/";
+
+		fn << basePath.str() << now << "_" << dataset << "_BSGD-" << bsgd_ver << "_"
 				<< initType << "_RMSE_K" << D << "_Exp" << experiment << "_Run"
 				<< run << ".txt";
 		fileName = fn.str();
@@ -296,11 +297,18 @@ int main(int argc, const char ** argv) {
 	engine.run(program, niters);
 
 	/* Output latent factor matrices in matrix-market format */
-//	output_sgd_result(training);
+	if (logMode == 1) {
+		std::stringstream baseFn;
+		baseFn << basePath.str() << now << "_" << dataset << "_BSGD-" << bsgd_ver << "_"
+				<< initType << "_RMSE_K" << D << "_Experiment" << experiment << "_Run"
+				<< run;
+		output_sgd_result(baseFn.str());
+	}
+
 	double testRMSE = test_predictions(&bsgd_predict);
 
 	// write RMSE on test set to log file
-	if (logMode) {
+	if (logMode == 1) {
 		logFile << "Test RMSE: " << testRMSE << std::endl;
 		std::cout.rdbuf(backup);
 		logFile.close();
