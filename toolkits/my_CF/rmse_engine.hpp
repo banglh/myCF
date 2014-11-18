@@ -25,10 +25,13 @@
  */
 
 int hehe = 2;
-float (*pprediction_func)(const vertex_data&, const vertex_data&, const float, double &, void *) = NULL;
+float (*pprediction_func)(const vertex_data&, const vertex_data&, const float,
+		double &, void *) = NULL;
 vec validation_rmse_vec;
 vec users_vec;
 vec sum_ap_vec;
+vec sum_recall_vec;	// <ice>
+int randomPickedNum = 1000;
 bool user_nodes = true;
 int num_threads = 1;
 bool converged_engine = false;
@@ -37,178 +40,316 @@ int cur_iteration = 0;
  * GraphChi programs need to subclass GraphChiProgram<vertex-type, edge-type> 
  * class. The main logic is usually in the update function.
  */
-struct ValidationAPProgram : public GraphChiProgram<VertexDataType, EdgeDataType> {
+struct ValidationAPProgram: public GraphChiProgram<VertexDataType, EdgeDataType> {
 
-  /**
-   *  compute validaton AP for a single user
-   */
-  void update(graphchi_vertex<VertexDataType, EdgeDataType> &vertex, graphchi_context &gcontext) {
+	/**
+	 *  compute validaton AP for a single user
+	 */
+	void update(graphchi_vertex<VertexDataType, EdgeDataType> &vertex,
+			graphchi_context &gcontext) {
 
-    if (user_nodes && vertex.id() >= M)
-      return;
-    else if (!user_nodes && vertex.id() < M)
-      return;
-    vertex_data & vdata = latent_factors_inmem[vertex.id()];
-    vec ratings = zeros(vertex.num_outedges());
-    vec real_vals = zeros(vertex.num_outedges());
-    if (ratings.size() > 0){
-      users_vec[omp_get_thread_num()]++;
-      int j=0;
-      int real_click_count = 0;
-      for(int e=0; e < vertex.num_outedges(); e++) {
-        const EdgeDataType & observation = vertex.edge(e)->get_data();
-        vertex_data & pdata = latent_factors_inmem[vertex.edge(e)->vertex_id()];
-        double prediction;
-        (*pprediction_func)(vdata, pdata, observation, prediction, NULL);
-        ratings[j] = prediction;
-        real_vals[j] = observation;
-        if (observation > 0)
-          real_click_count++;
-        j++;
-      }
-      int count = 0;
-      double ap = 0;
-      ivec pos = sort_index(ratings);
-      for (int j=0; j< std::min(ap_number, (int)ratings.size()); j++){
-        if (real_vals[pos[ratings.size() - j - 1]] > 0)
-          ap += (++count * 1.0/(j+1));
-      }
-      if (real_click_count > 0 )
-        ap /= real_click_count;
-      else ap = 0;
-      sum_ap_vec[omp_get_thread_num()] += ap;
-    }
-  }
-  void before_iteration(int iteration, graphchi_context & gcontext){
-    last_validation_rmse = dvalidation_rmse;
-    users_vec = zeros(num_threads);
-    sum_ap_vec = zeros(num_threads);
-  }
-  /**
-   * Called after an iteration has finished.
-   */
-  void after_iteration(int iteration, graphchi_context &gcontext) {
-    assert(Le > 0);
-    dvalidation_rmse = finalize_rmse(sum(sum_ap_vec) , (double)sum(users_vec));
-    std::cout<<"  Validation  " << error_names[loss_type] << ":" << std::setw(10) << dvalidation_rmse << std::endl;
-    if (halt_on_rmse_increase > 0 && halt_on_rmse_increase < cur_iteration && dvalidation_rmse > last_validation_rmse){
-      logstream(LOG_WARNING)<<"Stopping engine because of validation " << error_names[loss_type] <<  " increase" << std::endl;
-      //gcontext.set_last_iteration(gcontext.iteration);
-      converged_engine = true;
-    }
-  }
+		if (user_nodes && vertex.id() >= M)
+			return;
+		else if (!user_nodes && vertex.id() < M)
+			return;
+		vertex_data & vdata = latent_factors_inmem[vertex.id()];
+		vec ratings = zeros(vertex.num_outedges());
+		vec real_vals = zeros(vertex.num_outedges());
+		if (ratings.size() > 0) {
+			users_vec[omp_get_thread_num()]++;
+			int j = 0;
+			int real_click_count = 0;
+			for (int e = 0; e < vertex.num_outedges(); e++) {
+				const EdgeDataType & observation = vertex.edge(e)->get_data();
+				vertex_data & pdata =
+						latent_factors_inmem[vertex.edge(e)->vertex_id()];
+				double prediction;
+				(*pprediction_func)(vdata, pdata, observation, prediction,
+						NULL);
+				ratings[j] = prediction;
+				real_vals[j] = observation;
+				if (observation > 0)
+					real_click_count++;
+				j++;
+			}
+			int count = 0;
+			double ap = 0;
+			ivec pos = sort_index(ratings);
+			for (int j = 0; j < std::min(ap_number, (int) ratings.size());
+					j++) {
+				if (real_vals[pos[ratings.size() - j - 1]] > 0)
+					ap += (++count * 1.0 / (j + 1));
+			}
+			if (real_click_count > 0)
+				ap /= real_click_count;
+			else
+				ap = 0;
+			sum_ap_vec[omp_get_thread_num()] += ap;
+		}
+	}
+	void before_iteration(int iteration, graphchi_context & gcontext) {
+		last_validation_rmse = dvalidation_rmse;
+		users_vec = zeros(num_threads);
+		sum_ap_vec = zeros(num_threads);
+	}
+	/**
+	 * Called after an iteration has finished.
+	 */
+	void after_iteration(int iteration, graphchi_context &gcontext) {
+		assert(Le > 0);
+		dvalidation_rmse = finalize_rmse(sum(sum_ap_vec),
+				(double) sum(users_vec));
+		std::cout << "  Validation  " << error_names[loss_type] << ":"
+				<< std::setw(10) << dvalidation_rmse << std::endl;
+		if (halt_on_rmse_increase > 0 && halt_on_rmse_increase < cur_iteration
+				&& dvalidation_rmse > last_validation_rmse) {
+			logstream(LOG_WARNING) << "Stopping engine because of validation "
+					<< error_names[loss_type] << " increase" << std::endl;
+			//gcontext.set_last_iteration(gcontext.iteration);
+			converged_engine = true;
+		}
+	}
 };
 
+/**
+ * GraphChi programs need to subclass GraphChiProgram<vertex-type, edge-type>
+ * class. The main logic is usually in the update function.
+ */
+struct ValidationRecallProgram: public GraphChiProgram<VertexDataType,
+		EdgeDataType> {
 
+	/**
+	 *  compute validaton Recall for a single user
+	 */
+	void update(graphchi_vertex<VertexDataType, EdgeDataType> &vertex,
+			graphchi_context &gcontext) {
+
+		if (user_nodes && vertex.id() >= M)
+			return;
+		else if (!user_nodes && vertex.id() < M)
+			return;
+		// get user feature vector
+		vertex_data & vdata = latent_factors_inmem[vertex.id()];
+
+		int hits = 0;
+		int relItemsNum = 0;
+		double recall = 0.0;
+		srand (time(NULL));
+		// for each relevant items of the user
+		for(int e = 0; e < vertex.num_outedges(); e++) {
+			float observation = vertex.edge(e)->get_data();
+			if (observation >= binary_relevance_threshold) {
+				relItemsNum++;
+
+				// get current item id
+				int relItemId = vertex.edge(e)->vertex_id();
+
+				std::set<int> pickedItems;// set of picked items
+				ivec pickedIdVec(randomPickedNum + 1);
+				pickedItems.insert((int) relItemId);// add the current relevant item
+				// randomly pick additional 1000 items
+				for (int i = 0; i < randomPickedNum; i++) {
+					bool done = false;
+					while (!done) {
+						// pick a random number from M~(M+N-1)
+						int randomId = M + rand() % N;
+						if (pickedItems.count(randomId) == 0) {
+							pickedItems.insert((int) randomId);
+							pickedIdVec[i] = randomId;
+							done = true;
+						}
+					}
+				}
+				pickedIdVec[randomPickedNum] = relItemId;
+
+				// estimate rating for each item
+				vec estRatings = zeros(pickedIdVec.size());
+				for (int i = 0; i < pickedIdVec.size(); i++) {
+					vertex_data & pdata = latent_factors_inmem[pickedIdVec[i]];
+					double prediction;
+					(*pprediction_func)(vdata, pdata, 0, prediction, NULL);
+					estRatings[i] = prediction;
+				}
+
+				// rank the estimated ratings
+				ivec pos = sort_index(estRatings);
+
+				// check if the current relevant item is in the top-N items
+				for (int i = 0; i < recall_number; i++) {
+					if (pos[randomPickedNum - i] == randomPickedNum) {
+						hits += 1;
+						break;
+					}
+				}
+			}
+		}
+
+		// get recall
+		if (relItemsNum > 0) {
+			recall = (double) hits / relItemsNum;
+			users_vec[omp_get_thread_num()]++;
+		}
+
+		sum_recall_vec[omp_get_thread_num()] += recall;
+	}
+
+	void before_iteration(int iteration, graphchi_context & gcontext) {
+		last_validation_rmse = dvalidation_rmse;
+		users_vec = zeros(num_threads);
+		sum_recall_vec = zeros(num_threads);
+	}
+	/**
+	 * Called after an iteration has finished.
+	 */
+	void after_iteration(int iteration, graphchi_context &gcontext) {
+		assert(Le > 0);
+		dvalidation_rmse = finalize_rmse(sum(sum_recall_vec),
+				(double) sum(users_vec));
+		std::cout << "  Validation  " << error_names[loss_type] << ":"
+				<< std::setw(10) << dvalidation_rmse << std::endl;
+//    if (halt_on_rmse_increase > 0 && halt_on_rmse_increase < cur_iteration && dvalidation_rmse > last_validation_rmse){
+//      logstream(LOG_WARNING)<<"Stopping engine because of validation " << error_names[loss_type] <<  " increase" << std::endl;
+//      //gcontext.set_last_iteration(gcontext.iteration);
+//      converged_engine = true;
+//    }
+	}
+};
 
 /**
  * GraphChi programs need to subclass GraphChiProgram<vertex-type, edge-type> 
  * class. The main logic is usually in the update function.
  */
-struct ValidationRMSEProgram : public GraphChiProgram<VertexDataType, EdgeDataType> {
+struct ValidationRMSEProgram: public GraphChiProgram<VertexDataType,
+		EdgeDataType> {
 
-  /**
-   *  compute validaton RMSE for a single user
-   */
-  void update(graphchi_vertex<VertexDataType, EdgeDataType> &vertex, graphchi_context &gcontext) {
-    if (user_nodes && vertex.id() >= M)
-      return;
-    else if (!user_nodes && vertex.id() < M)
-      return;
-    vertex_data & vdata = latent_factors_inmem[vertex.id()];
-    for(int e=0; e < vertex.num_outedges(); e++) {
-      const EdgeDataType & observation = vertex.edge(e)->get_data();
-      vertex_data & nbr_latent = latent_factors_inmem[vertex.edge(e)->vertex_id()];
-      double prediction;
-      double rmse = (*pprediction_func)(vdata, nbr_latent, observation, prediction, NULL);
+	/**
+	 *  compute validaton RMSE for a single user
+	 */
+	void update(graphchi_vertex<VertexDataType, EdgeDataType> &vertex,
+			graphchi_context &gcontext) {
+		if (user_nodes && vertex.id() >= M)
+			return;
+		else if (!user_nodes && vertex.id() < M)
+			return;
+		vertex_data & vdata = latent_factors_inmem[vertex.id()];
+		for (int e = 0; e < vertex.num_outedges(); e++) {
+			const EdgeDataType & observation = vertex.edge(e)->get_data();
+			vertex_data & nbr_latent =
+					latent_factors_inmem[vertex.edge(e)->vertex_id()];
+			double prediction;
+			double rmse = (*pprediction_func)(vdata, nbr_latent, observation,
+					prediction, NULL);
 //      assert(rmse <= pow(maxval - minval, 2));	<ice>
-      assert(validation_rmse_vec.size() > omp_get_thread_num());
-      validation_rmse_vec[omp_get_thread_num()] += rmse;
-    }
-  }
+			assert(validation_rmse_vec.size() > omp_get_thread_num());
+			validation_rmse_vec[omp_get_thread_num()] += rmse;
+		}
+	}
 
-  void before_iteration(int iteration, graphchi_context & gcontext){
-    last_validation_rmse = dvalidation_rmse;
-    validation_rmse_vec = zeros(num_threads);
-  }
-  /**
-   * Called after an iteration has finished.
-   */
-  void after_iteration(int iteration, graphchi_context &gcontext) {
-    assert(Le > 0);
-    dvalidation_rmse = finalize_rmse(sum(validation_rmse_vec) , (double)Le);
-    std::cout<<"  Validation  " << error_names[loss_type] << ":" << std::setw(10) << dvalidation_rmse << std::endl;
-    if (halt_on_rmse_increase > 0 && halt_on_rmse_increase < cur_iteration && dvalidation_rmse > last_validation_rmse){
-      logstream(LOG_WARNING)<<"Stopping engine because of validation RMSE increase" << std::endl;
-      std::cout <<"Stopping engine because of validation RMSE increase" << std::endl;
-       converged_engine = true;
-    }
-    // stop if validation rmse is not improved so much
-    if (halt_on_minor_improvement > 0.0 && cur_iteration > 0 && halt_on_minor_improvement > (last_validation_rmse - dvalidation_rmse)) {
-    	if (!converged_engine) {
-    		logstream(LOG_WARNING)<<"Stopping engine because of too minor validation RMSE improvement" << std::endl;
-    		std::cout <<"Stopping engine because of too minor validation RMSE improvement" << std::endl;
-    		converged_engine = true;
-    	}
-    }
-  }
+	void before_iteration(int iteration, graphchi_context & gcontext) {
+		last_validation_rmse = dvalidation_rmse;
+		validation_rmse_vec = zeros(num_threads);
+	}
+	/**
+	 * Called after an iteration has finished.
+	 */
+	void after_iteration(int iteration, graphchi_context &gcontext) {
+		assert(Le > 0);
+		dvalidation_rmse = finalize_rmse(sum(validation_rmse_vec), (double) Le);
+		std::cout << "  Validation  " << error_names[loss_type] << ":"
+				<< std::setw(10) << dvalidation_rmse << std::endl;
+		if (halt_on_rmse_increase > 0 && halt_on_rmse_increase < cur_iteration
+				&& dvalidation_rmse > last_validation_rmse) {
+			logstream(LOG_WARNING)
+					<< "Stopping engine because of validation RMSE increase"
+					<< std::endl;
+			std::cout << "Stopping engine because of validation RMSE increase"
+					<< std::endl;
+			converged_engine = true;
+		}
+		// stop if validation rmse is not improved so much
+		if (halt_on_minor_improvement > 0.0 && cur_iteration > 0
+				&& halt_on_minor_improvement
+						> (last_validation_rmse - dvalidation_rmse)) {
+			if (!converged_engine) {
+				logstream(LOG_WARNING)
+						<< "Stopping engine because of too minor validation RMSE improvement"
+						<< std::endl;
+				std::cout
+						<< "Stopping engine because of too minor validation RMSE improvement"
+						<< std::endl;
+				converged_engine = true;
+			}
+		}
+	}
 };
 
-void reset_rmse(int exec_threads){
-  logstream(LOG_DEBUG)<<"Detected number of threads: " << exec_threads << std::endl;
-  num_threads = exec_threads;
-  rmse_vec = zeros(exec_threads);
+void reset_rmse(int exec_threads) {
+	logstream(LOG_DEBUG) << "Detected number of threads: " << exec_threads
+			<< std::endl;
+	num_threads = exec_threads;
+	rmse_vec = zeros(exec_threads);
 }
 
 template<typename VertexDataType, typename EdgeDataType>
-void init_validation_rmse_engine(graphchi_engine<VertexDataType,EdgeDataType> *& pvalidation_engine, int nshards,float (*prediction_func)(const vertex_data & user, const vertex_data & movie, float rating, double & prediction, void * extra)){
-  if (nshards == -1)
-    return;
-  metrics * m = new metrics("validation_rmse_engine");
-  graphchi_engine<VertexDataType, EdgeDataType> * engine = new graphchi_engine<VertexDataType, EdgeDataType>(validation, nshards, false, *m);
-  set_engine_flags(*engine);
-  pvalidation_engine = engine;
-  pprediction_func = prediction_func;
+void init_validation_rmse_engine(
+		graphchi_engine<VertexDataType, EdgeDataType> *& pvalidation_engine,
+		int nshards,
+		float (*prediction_func)(const vertex_data & user,
+				const vertex_data & movie, float rating, double & prediction,
+				void * extra)) {
+	if (nshards == -1)
+		return;
+	metrics * m = new metrics("validation_rmse_engine");
+	graphchi_engine<VertexDataType, EdgeDataType> * engine =
+			new graphchi_engine<VertexDataType, EdgeDataType>(validation,
+					nshards, false, *m);
+	set_engine_flags(*engine);
+	pvalidation_engine = engine;
+	pprediction_func = prediction_func;
 }
 
 template<typename VertexDataType, typename EdgeDataType>
-void run_validation(graphchi_engine<VertexDataType, EdgeDataType> * pvalidation_engine, graphchi_context & context){
-  //no validation data, no need to run validation engine calculations
-  cur_iteration = context.iteration;
-  if (pvalidation_engine == NULL){
-    std::cout << std::endl;
-    return;
-  }
-  if (calc_ap){ //AP
-    ValidationAPProgram program;
-    pvalidation_engine->run(program, 1);
-  }
-  else { //RMSE
-    ValidationRMSEProgram program;
-    pvalidation_engine->run(program, 1);
-  }
-  if (converged_engine)
-    context.set_last_iteration(context.iteration);
+void run_validation(
+		graphchi_engine<VertexDataType, EdgeDataType> * pvalidation_engine,
+		graphchi_context & context) {
+	//no validation data, no need to run validation engine calculations
+	cur_iteration = context.iteration;
+	if (pvalidation_engine == NULL) {
+		std::cout << std::endl;
+		return;
+	}
+	if (calc_ap) { //AP
+		ValidationAPProgram program;
+		pvalidation_engine->run(program, 1);
+	} else if (calc_recall) { // Recall <ice>
+		ValidationRecallProgram program;
+		pvalidation_engine->run(program, 1);
+	} else { //RMSE
+		ValidationRMSEProgram program;
+		pvalidation_engine->run(program, 1);
+	}
+	if (converged_engine)
+		context.set_last_iteration(context.iteration);
 }
 
-template<typename VertexDataType, typename EdgeDataType>
-void bsgd_run_validation(std::ofstream & f, graphchi_engine<VertexDataType, EdgeDataType> * pvalidation_engine, graphchi_context & context){
-  //no validation data, no need to run validation engine calculations
-  cur_iteration = context.iteration;
-  if (pvalidation_engine == NULL){
-    std::cout << std::endl;
-    return;
-  }
-  if (calc_ap){ //AP
-    ValidationAPProgram program;
-    pvalidation_engine->run(program, 1);
-  }
-  else { //RMSE
-    ValidationRMSEProgram program(f);
-    pvalidation_engine->run(program, 1);
-  }
-  if (converged_engine)
-    context.set_last_iteration(context.iteration);
-}
+//template<typename VertexDataType, typename EdgeDataType>
+//void bsgd_run_validation(std::ofstream & f, graphchi_engine<VertexDataType, EdgeDataType> * pvalidation_engine, graphchi_context & context){
+//  //no validation data, no need to run validation engine calculations
+//  cur_iteration = context.iteration;
+//  if (pvalidation_engine == NULL){
+//    std::cout << std::endl;
+//    return;
+//  }
+//  if (calc_ap){ //AP
+//    ValidationAPProgram program;
+//    pvalidation_engine->run(program, 1);
+//  }
+//  else { //RMSE
+//    ValidationRMSEProgram program(f);
+//    pvalidation_engine->run(program, 1);
+//  }
+//  if (converged_engine)
+//    context.set_last_iteration(context.iteration);
+//}
 
 #endif //__GRAPHCHI_RMSE_ENGINE

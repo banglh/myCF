@@ -201,5 +201,6 @@ runMovieLens1M-K10
 runMovieLens1M-K20
 runMovieLens1M-K50
 runSGD
+runRankBSGD
 
 

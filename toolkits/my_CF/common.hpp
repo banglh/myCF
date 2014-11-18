@@ -108,14 +108,18 @@ int time_nodes_offset = 0; //time nodes position are starting at this offset (op
 int weighted_als = 0; //1 if this algorithm is weighted als
 
 /* support for different loss types (for SGD variants) */
+// <ice> add new loss type: RECALL
 std::string loss = "square";
 enum {
-	LOGISTIC = 0, SQUARE = 1, ABS = 2, AP = 3
+	LOGISTIC = 0, SQUARE = 1, ABS = 2, AP = 3, RECALL = 4
 };
-const char * error_names[] = { "LOGISTIC LOSS", "RMSE", "MAE", "AP" };
+const char * error_names[] = { "LOGISTIC LOSS", "RMSE", "MAE", "AP", "RECALL" };
 int loss_type = SQUARE;
 int calc_ap = 0;
 int ap_number = 3; //AP@3
+
+int calc_recall = 0;	// <ice>
+int recall_number = 5;	// <ice> recall@5
 
 enum {
 	TRAINING = 0, VALIDATION = 1, TEST = 2
@@ -227,8 +231,8 @@ void parse_command_line_args() {
 	input_file_offset = get_option_int("input_file_offset", input_file_offset);
 	tokens_per_row = get_option_int("tokens_per_row", tokens_per_row);
 	allow_zeros = get_option_int("allow_zeros", 0);
-	binary_relevance_threshold = get_option_int("binary_relevance_threshold",
-			-1);
+	binary_relevance_threshold = get_option_int("binary_relevance_threshold", -1);
+
 	/* find out loss type (optional, for SGD variants only) */
 	loss = get_option_string("loss", loss);
 	if (loss == "square")
@@ -239,15 +243,25 @@ void parse_command_line_args() {
 		loss_type = ABS;
 	else if (loss == "ap")
 		loss_type = AP;
+	else if (loss == "recall")	// <ice>
+		loss_type = RECALL;
 	else
 		logstream(LOG_FATAL)
-				<< "Loss type should be one of [square,logistic,abs] (for example, --loss==square);"
+				<< "Loss type should be one of [square,logistic,abs,recall] (for example, --loss==square);"
 				<< std::endl;
 
 	calc_ap = get_option_int("calc_ap", calc_ap);
 	if (calc_ap)
 		loss_type = AP;
 	ap_number = get_option_int("ap_number", ap_number);
+
+	/** ice ***/
+	calc_recall = get_option_int("calc_recall", calc_recall);
+	if (calc_recall)
+		loss_type = RECALL;
+	recall_number = get_option_int("recall_number", recall_number);
+	/*****/
+
 	kfold_cross_validation = get_option_int("kfold_cross_validation",
 			kfold_cross_validation);
 	kfold_cross_validation_index = get_option_int(
