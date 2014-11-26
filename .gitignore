@@ -196,11 +196,13 @@ paramsNotes.txt
 /toolkits/my_CF/bsvd_facesExp
 /toolkits/my_CF/bsgd
 /toolkits/my_CF/bsgd_baseline_prepare
+/toolkits/my_CF/bsvd2-impute
 runMovieLens1M
 runMovieLens1M-K10
 runMovieLens1M-K20
 runMovieLens1M-K50
 runSGD
 runRankBSGD
+runImputeBSGD
 
 
